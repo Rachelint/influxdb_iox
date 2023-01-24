@@ -230,9 +230,12 @@ fn rewrite_field_list(
     if (has_field_wildcard, has_group_by_wildcard) == (false, false) {
         return Ok(());
     }
-
+    
+    // 从 metrics 和 sub select 中提取 field 和 tag。
+    // 好像并不支持 sub select 的 expand?
     let (field_set, mut tag_set) = from_field_and_dimensions(namespace, &stmt.from)?;
 
+    // 如果没有 group by wildcard，那么就把 group by 中的 tag 从 tag_set 中移除。
     if !has_group_by_wildcard {
         if let Some(group_by) = &stmt.group_by {
             // Remove any explicitly listed tags in the GROUP BY clause, so they are not expanded
@@ -256,7 +259,7 @@ fn rewrite_field_list(
             name: k.clone(),
             data_type: *v,
         });
-
+        
         if !has_group_by_wildcard {
             fields_iter
                 .chain(tag_set.iter().map(|tag| VarRef {
@@ -287,6 +290,7 @@ fn rewrite_field_list(
             };
 
             match &f.expr {
+                // 展开 *，*::tag, *::field
                 Expr::Wildcard(wct) => {
                     let filter: fn(&&VarRef) -> bool = match wct {
                         None => |_| true,
@@ -297,6 +301,7 @@ fn rewrite_field_list(
                     fields.iter().filter(filter).for_each(add_field);
                 }
 
+                // 正则表达式。
                 Expr::Literal(Literal::Regex(re)) => {
                     let re = parse_regex(re)?;
                     fields
@@ -305,6 +310,7 @@ fn rewrite_field_list(
                         .for_each(add_field);
                 }
 
+                //
                 Expr::Call { name, args } => {
                     let mut name = name;
                     let mut args = args;
@@ -414,13 +420,16 @@ fn rewrite_field_list(
         stmt.fields = FieldList::new(new_fields);
     }
 
+    // 如果有group by wildcard，那么group by的tags就是所有的tags
     if has_group_by_wildcard {
+        // Group by tags.
         let group_by_tags = if has_group_by_wildcard {
             tag_set.into_iter().sorted().collect::<Vec<_>>()
         } else {
             vec![]
         };
 
+        // Expand 之后用于 group by 的 tags。
         if let Some(group_by) = &stmt.group_by {
             let mut new_dimensions = Vec::new();
 
