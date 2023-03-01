@@ -322,7 +322,18 @@ mod test {
     use crate::{
         assert_expect_error, assert_failure, binary_op, call, cond_op, grouped, regex, var_ref,
     };
-    use test_helpers::assert_error;
+
+    macro_rules! assert_error {
+        ($OPERATION: expr, $(|)? $( $ERROR_PATTERN:pat_param )|+ $( if $GUARD: expr )? $(,)?) => {
+            let err = $OPERATION.unwrap_err();
+            assert!(
+                matches!(err, $( $ERROR_PATTERN )|+ $( if $GUARD )?),
+                "Expected {}, but got {:?}",
+                stringify!($( $ERROR_PATTERN )|+ $( if $GUARD )?),
+                err
+            );
+        };
+    }
 
     impl From<Expr> for ConditionalExpression {
         fn from(v: Expr) -> Self {
